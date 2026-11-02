@@ -14,7 +14,7 @@ dev = [
   "bandit>=1.8,<2",
   "httpx2>=2.16,<3",
   "pytest>=8,<10",
-  "pytest-cov>=6,<8",
+  "pytest-cov>=7.1,<8",
   "ruff>=0.11,<1",
 ]
 
@@ -32,11 +32,12 @@ filterwarnings = ["error"]
 
 [tool.coverage.run]
 source = ["control_plane"]
-omit = ["control_plane/__main__.py", "control_plane/inject.py", "control_plane/smoke.py"]
+patch = ["subprocess"]
+sigterm = true
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 85
+fail_under = 100
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]

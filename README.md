@@ -24,7 +24,7 @@ make smoke    # live HTTP lifecycle plus 12 concurrent PATCH requests
 `make test` builds a separate test image and runs an isolated RabbitMQ container.
 It cleans up its own containers and volumes on exit and does not touch the running
 application. The test command fails on formatting, Ruff lint, Bandit security
-findings, Python warnings, failed tests, core application coverage below 85%, or an
+findings, Python warnings, failed tests, application statement coverage below 100%, or an
 unclean broker shutdown. Broker logs are printed on failure; successful runs show
 the check results and the broker's verified exit code. Shutdown allows 30 seconds
 for RabbitMQ to exit gracefully before removing the temporary containers.
@@ -318,7 +318,10 @@ The JSON ID is authoritative for deduplication.
 - `tests/test_api.py`: HTTP contract, validation, pagination, concurrent request handlers.
 - `tests/test_broker.py`: confirm failure/crash windows, ACK order, poison and backoff.
 - `tests/test_integration.py`: real RabbitMQ with a separate worker process, full
-  lifecycle, restart persistence, reordering, duplicates, redelivery and poison queues.
+  lifecycle, restart persistence, reordering, duplicates, redelivery and poison queues;
+  SIGINT/SIGTERM recovery; API startup and CLI tools over real HTTP and AMQP.
+- `tests/test_cli.py`: invalid injector arguments, connection cleanup on publication
+  failure, and smoke-tool failure and timeout reporting.
 - `tests/test_runner.py`: quality-gate exit codes, cleanup on failure, and rejection
   of a forced broker shutdown.
 - `make smoke`: live TCP HTTP requests against the running Compose application.
@@ -334,11 +337,15 @@ make format
 
 The complete required gate remains `make test`. The lockfile pins all Python
 dependencies. CI runs the same containerized gate on push and pull request.
+Coverage includes every module in `control_plane`, including the API launcher,
+worker, injector, and smoke utility, with no application files or lines excluded.
+Subprocess measurement and SIGTERM capture retain coverage from the actual CLI
+processes. The enforced 100% target measures executed statements, not branch coverage.
 
 ### Local verification — 2 November 2026
 
-The containerized gate passed **87 tests**, with **96.57% core-code statement
-coverage** (the database, HTTP API, and broker module each reached 100%). Ruff's
+The containerized gate passed **96 tests**, with **100% application statement
+coverage** (498 statements, zero missed, including all CLI entry points). Ruff's
 formatter/linter and Bandit passed. The run emitted no warnings, and RabbitMQ
 shut down with exit code 0. Tests use the
 [supported httpx2 client](https://www.starlette.io/testclient/); pytest treats

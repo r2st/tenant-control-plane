@@ -1,6 +1,8 @@
 """These tests use real durable queues and a separate worker OS process."""
 
+import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -12,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from control_plane.api import create_app
 from control_plane.broker import RESULTS, TASKS, connect, dispatch_one, publish, topology
+from control_plane.smoke import request
 from tests.conftest import event
 
 pytestmark = [
@@ -43,7 +46,7 @@ def broker_channel():
 
 
 @contextmanager
-def worker(tmp_path, *args):
+def worker(tmp_path, *args, stop_signal=signal.SIGTERM):
     with (tmp_path / "worker.log").open("w+") as log:
         process = subprocess.Popen(
             [sys.executable, "-m", "control_plane.worker", *args],
@@ -58,12 +61,14 @@ def worker(tmp_path, *args):
             print(log.read())
             raise
         finally:
-            process.terminate()
+            process.send_signal(stop_signal)
             try:
-                process.wait(timeout=10)
+                exit_code = process.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
+                pytest.fail("Worker failed to shut down gracefully")
+            assert exit_code == 0, "Worker exited abnormally"
 
 
 def wait_status(client, path, status):
@@ -209,3 +214,109 @@ def test_readiness_recovers_after_broker_connection_failures(tmp_path, monkeypat
         eventually(lambda: client.get("/health/ready").status_code == 200)
         wait_status(client, f"/tenants/{created['tenant']['id']}", "active")
         assert attempts >= 6
+
+
+@pytest.mark.parametrize("stop_signal", [signal.SIGINT, signal.SIGTERM])
+def test_worker_signal_shutdown_requeues_unfinished_task(broker_channel, tmp_path, stop_signal):
+    with TestClient(create_app(str(tmp_path / "signal.sqlite3"))) as client:
+        with worker(
+            tmp_path,
+            "--min-delay-ms",
+            "60000",
+            "--max-delay-ms",
+            "60000",
+            stop_signal=stop_signal,
+        ):
+            created = client.post("/tenants", json={"slug": "interrupted", "name": "Resume"}).json()
+            task_path = f"/tasks/{created['task']['id']}"
+            tenant_path = f"/tenants/{created['tenant']['id']}"
+            wait_status(client, task_path, "in_progress")
+        assert client.get(task_path).json()["status"] == "in_progress"
+        assert client.get(tenant_path).json()["version"] == 1
+        # A fresh process receives the unacknowledged task and finishes it exactly once.
+        with worker(tmp_path, "--min-delay-ms", "0", "--max-delay-ms", "0"):
+            assert wait_status(client, tenant_path, "active")["version"] == 2
+            assert client.get(task_path).json()["status"] == "done"
+
+
+def test_cli_tools_against_real_api_and_broker(broker_channel, tmp_path, monkeypatch):
+    from urllib.error import URLError
+
+    monkeypatch.setenv("API_URL", "http://127.0.0.1:8000")
+    with (tmp_path / "api.log").open("w+") as log:
+        server = subprocess.Popen(
+            [sys.executable, "-m", "control_plane"],
+            env={**os.environ, "DATABASE_PATH": str(tmp_path / "tcp.sqlite3")},
+            stdout=log,
+            stderr=log,
+        )
+
+        def ready():
+            try:
+                return request("GET", "/health/ready")[0] == 200
+            except URLError:
+                return False
+
+        def run_cli(module, *args):
+            result = subprocess.run(
+                [sys.executable, "-m", module, *args],
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+            assert result.returncode == 0, result.stderr
+            return result.stdout
+
+        try:
+            eventually(ready)
+            with worker(tmp_path, "--min-delay-ms", "100", "--max-delay-ms", "100"):
+                report = json.loads(run_cli("control_plane.smoke"))
+                assert report["result"] == "PASS"
+                assert report["completed_tasks"] == 3
+                assert report["final_version"] == 6
+                assert report["concurrent_patches"] == {"accepted": 1, "conflicts": 11}
+
+            code, created = request("POST", "/tenants", {"slug": "injected", "name": "Injected"})
+            assert code == 202
+            task_id = created["task"]["id"]
+            terminal_id = str(uuid4())
+            run_cli(
+                "control_plane.inject",
+                "--task-id",
+                task_id,
+                "--status",
+                "done",
+                "--event-id",
+                terminal_id,
+                "--repeat",
+                "2",
+            )
+            assert request("GET", f"/tasks/{task_id}")[1]["status"] == "accepted"
+            run_cli("control_plane.inject", "--task-id", task_id, "--status", "in_progress")
+            eventually(lambda: request("GET", f"/tasks/{task_id}")[1]["status"] == "done")
+            assert request("GET", f"/tenants/{created['tenant']['id']}")[1]["version"] == 2
+            run_cli("control_plane.inject", "--raw", "not-json")
+            eventually(
+                lambda: (
+                    broker_channel.queue_declare(
+                        queue=RESULTS + ".dead", passive=True
+                    ).method.message_count
+                    == 1
+                )
+            )
+        except BaseException:
+            log.seek(0)
+            print(log.read())
+            raise
+        finally:
+            server.terminate()
+            try:
+                server_exit = server.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                server.wait(timeout=5)
+                pytest.fail("API process failed to shut down gracefully")
+            # Uvicorn restores and re-raises SIGTERM after completing lifespan shutdown.
+            assert server_exit in (0, -signal.SIGTERM), "API process exited abnormally"
+            log.seek(0)
+            assert "Application shutdown complete." in log.read()
