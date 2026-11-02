@@ -4,6 +4,10 @@ A Python service with a REST API, durable task publication, a result consumer,
 and a separate worker simulator. SQLite owns the state; RabbitMQ carries tasks
 and progress. Everything runs locally in Docker Compose.
 
+Open [the illustrated system design guide](system-design.html) in a browser for
+architecture diagrams, state transitions, recovery rules, and an interactive
+message walkthrough. It is a self-contained HTML file that works offline.
+
 ## Run from a cold checkout
 
 Prerequisites: Docker with Compose v2 or newer and GNU Make. No host Python,
