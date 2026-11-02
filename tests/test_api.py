@@ -7,6 +7,20 @@ from tests.conftest import finish
 from tests.test_state import race
 
 
+def test_root_opens_interactive_api_docs(client):
+    redirect = client.get("/", follow_redirects=False)
+    assert redirect.status_code == 307
+    assert redirect.headers["location"] == "/docs"
+    docs = client.get("/")
+    assert docs.status_code == 200
+    assert docs.url.path == "/docs"
+    assert docs.headers["content-type"].startswith("text/html")
+    assert "SwaggerUIBundle" in docs.text
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/tenants" in paths
+    assert "/" not in paths
+
+
 def test_crud_http_contract(client):
     response = client.post("/tenants", json={"slug": "acme", "name": " Acme "})
     assert response.status_code == 202

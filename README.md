@@ -21,7 +21,7 @@ make test     # formatter, linter, security scanner, unit + real-broker tests
 make smoke    # live HTTP lifecycle plus 12 concurrent PATCH requests
 ```
 
-- API: <http://localhost:8000>
+- API root: <http://localhost:8000> (redirects to interactive documentation)
 - Interactive API documentation: <http://localhost:8000/docs>
 - OpenAPI: <http://localhost:8000/openapi.json>
 - RabbitMQ management: <http://localhost:15672> (built-in local `guest` / `guest`)
@@ -154,6 +154,7 @@ The retry and delivery design follows the upstream descriptions of
 
 | Method and resource | Success | Behavior |
 | --- | --- | --- |
+| `GET /` | 307 | Redirect browser to interactive API documentation at `/docs` |
 | `POST /tenants` | 202 | Create tenant and accepted deploy task; `Location` points to tenant |
 | `GET /tenants` | 200 | List tenants, including destroyed ones |
 | `GET /tenants/{id}` | 200 | Get one tenant |
@@ -349,8 +350,8 @@ processes. The enforced 100% target measures executed statements, not branch cov
 
 ### Local verification — 2 November 2026
 
-The containerized gate passed **96 tests**, with **100% application statement
-coverage** (498 statements, zero missed, including all CLI entry points). Ruff's
+The containerized gate passed **97 tests**, with **100% application statement
+coverage** (501 statements, zero missed, including all CLI entry points). Ruff's
 formatter/linter and Bandit passed. The run emitted no warnings, and RabbitMQ
 shut down with exit code 0. Tests use the
 [supported httpx2 client](https://www.starlette.io/testclient/); pytest treats

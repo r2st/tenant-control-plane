@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException
 
 from control_plane.broker import Runtime
@@ -39,6 +39,10 @@ def create_app(db_path: str | None = None, messaging: bool = True) -> FastAPI:
     app = FastAPI(title="Tenant Provisioning Control Plane", version="0.1.0", lifespan=lifespan)
     app.state.store = store
     app.state.runtime = runtime
+
+    @app.get("/", include_in_schema=False)
+    def root():
+        return RedirectResponse(url="/docs")
 
     @app.exception_handler(DomainError)
     async def domain_error(request: Request, exc: DomainError):
