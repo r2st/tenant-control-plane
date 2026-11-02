@@ -14,7 +14,8 @@ Prerequisites: Docker with Compose v2 or newer and GNU Make. No host Python,
 database, broker, account, or credentials are needed.
 
 ```sh
-# From the root of this repository:
+git clone https://github.com/r2st/tenant-control-plane.git
+cd tenant-control-plane
 make up       # build and start the broker, API, and worker; wait for readiness
 make test     # formatter, linter, security scanner, unit + real-broker tests
 make smoke    # live HTTP lifecycle plus 12 concurrent PATCH requests
@@ -383,5 +384,5 @@ is stopped completes after it restarts, and an API restart preserves the resourc
 - HTTP POST retries are not keyed by a client idempotency header. A duplicate slug
   returns the contracted conflict; clients can inspect the tenant list to reconcile.
 
-This directory is self-contained for a public repository. Publishing or sending
-it externally is a separate submission step; running any command above stays local.
+The repository is self-contained. The application, broker, database, and test
+suite run locally; no hosted backend is required.
