@@ -6,6 +6,8 @@ services:
     volumes:
       - broker-data:/var/lib/rabbitmq
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq.enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./rabbitmq.management.conf:/etc/rabbitmq/conf.d/30-management.conf:ro
     ports:
       - "127.0.0.1:${BROKER_UI_PORT:-15672}:15672"
     healthcheck:
@@ -14,6 +16,7 @@ services:
       timeout: 5s
       retries: 30
     restart: unless-stopped
+    stop_grace_period: 30s
   api:
     build:
       context: .

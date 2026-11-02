@@ -24,7 +24,10 @@ make smoke    # live HTTP lifecycle plus 12 concurrent PATCH requests
 `make test` builds a separate test image and runs an isolated RabbitMQ container.
 It cleans up its own containers and volumes on exit and does not touch the running
 application. The test command fails on formatting, Ruff lint, Bandit security
-findings, failed tests, or core application coverage below 85%.
+findings, Python warnings, failed tests, core application coverage below 85%, or an
+unclean broker shutdown. Broker logs are printed on failure; successful runs show
+the check results and the broker's verified exit code. Shutdown allows 30 seconds
+for RabbitMQ to exit gracefully before removing the temporary containers.
 
 ```sh
 make logs                   # follow API and worker logs
@@ -40,6 +43,16 @@ The API and management ports bind only to loopback. AMQP is accessible inside th
 Compose network. The built-in guest account and relaxed guest loopback restriction
 are for this local assignment; this configuration is not a production deployment.
 There are no private credentials in the repository.
+
+The API process defaults to `127.0.0.1` when started directly on the host. The
+runtime image sets `API_HOST=0.0.0.0` for Docker port forwarding. RabbitMQ enables
+only the management plugin in the application and no optional plugins in tests.
+Its [management configuration](https://www.rabbitmq.com/docs/4.1/management)
+retains queue totals and operations while disabling deprecated historical statistics.
+RabbitMQ logs an expected "management only interface started" notice for this
+configuration; queue inspection, publishing, and consumption remain available.
+No separate frontend is required: the assignment specifies a REST service and
+worker, and `/docs` provides the interactive API interface.
 
 ## Architecture
 
@@ -306,6 +319,8 @@ The JSON ID is authoritative for deduplication.
 - `tests/test_broker.py`: confirm failure/crash windows, ACK order, poison and backoff.
 - `tests/test_integration.py`: real RabbitMQ with a separate worker process, full
   lifecycle, restart persistence, reordering, duplicates, redelivery and poison queues.
+- `tests/test_runner.py`: quality-gate exit codes, cleanup on failure, and rejection
+  of a forced broker shutdown.
 - `make smoke`: live TCP HTTP requests against the running Compose application.
 
 For quick development outside containers, install Python 3.13+ and
@@ -322,10 +337,12 @@ dependencies. CI runs the same containerized gate on push and pull request.
 
 ### Local verification — 2 November 2026
 
-The containerized gate passed **83 tests**, with **96.57% core-code statement
+The containerized gate passed **87 tests**, with **96.57% core-code statement
 coverage** (the database, HTTP API, and broker module each reached 100%). Ruff's
-formatter/linter and Bandit passed. A harmless Starlette/httpx deprecation warning
-remains in the test client; it does not affect the running HTTP service.
+formatter/linter and Bandit passed. The run emitted no warnings, and RabbitMQ
+shut down with exit code 0. Tests use the
+[supported httpx2 client](https://www.starlette.io/testclient/); pytest treats
+warnings as errors so a future dependency deprecation fails the gate visibly.
 
 `make smoke` passed against the running containers: all three tasks completed,
 the final tenant version was 6, and 12 concurrent PATCHes produced one acceptance

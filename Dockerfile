@@ -9,7 +9,7 @@ RUN uv sync --frozen --no-dev --no-install-project && \
     groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app && \
     mkdir /data && chown app:app /data
 COPY control_plane ./control_plane
-ENV PATH="/app/.venv/bin:$PATH" DATABASE_PATH=/data/control.sqlite3
+ENV PATH="/app/.venv/bin:$PATH" DATABASE_PATH=/data/control.sqlite3 API_HOST=0.0.0.0
 USER app
 CMD ["python", "-m", "control_plane"]
 

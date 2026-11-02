@@ -4,6 +4,8 @@ services:
     hostname: broker
     volumes:
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq.test.enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 3s
