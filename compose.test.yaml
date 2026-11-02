@@ -1,0 +1,21 @@
+services:
+  broker:
+    image: rabbitmq:4.1-alpine
+    hostname: broker
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+  checks:
+    build:
+      context: .
+      target: checks
+    environment:
+      BROKER_HOST: broker
+      INTEGRATION_TESTS: "1"
+    depends_on:
+      broker:
+        condition: service_healthy

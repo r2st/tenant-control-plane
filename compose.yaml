@@ -1,0 +1,58 @@
+name: tenant-control-plane
+services:
+  broker:
+    image: rabbitmq:4.1-management-alpine
+    hostname: broker
+    volumes:
+      - broker-data:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    ports:
+      - "127.0.0.1:${BROKER_UI_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+  api:
+    build:
+      context: .
+      target: runtime
+    environment:
+      BROKER_HOST: broker
+      DATABASE_PATH: /data/control.sqlite3
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - tenant-data:/data
+    depends_on:
+      broker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    init: true
+    restart: unless-stopped
+  worker:
+    build:
+      context: .
+      target: runtime
+    command: ["python", "-m", "control_plane.worker"]
+    environment:
+      BROKER_HOST: broker
+      WORKER_FAIL_RATE: ${WORKER_FAIL_RATE:-0}
+      WORKER_MIN_DELAY_MS: ${WORKER_MIN_DELAY_MS:-1000}
+      WORKER_MAX_DELAY_MS: ${WORKER_MAX_DELAY_MS:-2000}
+      WORKER_DUPLICATE_UPDATES: ${WORKER_DUPLICATE_UPDATES:-0}
+      WORKER_OUT_OF_ORDER: ${WORKER_OUT_OF_ORDER:-0}
+      WORKER_SEED: ${WORKER_SEED:-simulator}
+    depends_on:
+      api:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+volumes:
+  tenant-data:
+  broker-data:
