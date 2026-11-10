@@ -52,6 +52,12 @@
     .architecture .caption { font-size:12px; fill:var(--muted); }
     .architecture .node-title { font-size:15px; font-weight:700; }
     .architecture .small-title { font-size:13px; font-weight:700; }
+    .sequence-diagram { min-width:1000px; }
+    .sequence-diagram .lifeline { stroke:#c7d2dc; stroke-width:1.5; stroke-dasharray:4 5; }
+    .sequence-diagram .flow-request { stroke:#2457c6; stroke-width:2; marker-end:url(#sequence-blue); }
+    .sequence-diagram .flow-db { stroke:#6b7b89; stroke-width:1.7; marker-end:url(#sequence-gray); }
+    .sequence-diagram .flow-result { stroke:#087566; stroke-width:2; marker-end:url(#sequence-green); }
+    .sequence-diagram .phase-line { stroke:#dce3e9; stroke-width:1; stroke-dasharray:3 5; }
     .diagram-foot { border-top:1px solid var(--line); padding:13px 20px; font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:12px 25px; }
     .legend-line { display:inline-block; width:22px; border-top:2px solid var(--blue); vertical-align:middle; margin-right:7px; }
     .legend-line.result { border-color:var(--teal); }
@@ -237,6 +243,74 @@
       <li><strong>Simulate provisioning</strong>The worker emits <code>in_progress</code>, waits, then emits <code>done</code> or <code>failed</code>. It ACKs the task after confirming both result publications.</li>
       <li><strong>Apply the result</strong>The result consumer commits its inbox receipt and state changes before ACKing. Success leaves the tenant active at version 2.</li>
     </ol>
+    <figure class="diagram" style="margin-left:0;margin-right:0">
+      <div class="diagram-scroll" tabindex="0" role="region" aria-label="Request and message sequence diagram; scroll horizontally on small screens">
+        <svg class="architecture sequence-diagram" viewBox="0 0 1180 790" role="img" aria-labelledby="sequence-title sequence-desc">
+          <title id="sequence-title">Create request, task delivery, and progress result sequence</title>
+          <desc id="sequence-desc">A client sends POST tenants to the API. The API writes tenant, task, and outbox in a SQLite transaction and commits before returning 202. After the commit, the publisher independently reads the outbox and sends a confirmed task through RabbitMQ to the worker. The worker sends progress, then acknowledges its task. The result consumer stores the inbox receipt and updates task and tenant in one transaction. After commit it acknowledges the result. The client polls the API for the final status. The HTTP response and task publication may happen in either order after the database commit.</desc>
+          <defs>
+            <marker id="sequence-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#2457c6"/></marker>
+            <marker id="sequence-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#087566"/></marker>
+            <marker id="sequence-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#6b7b89"/></marker>
+          </defs>
+          <rect x="22" y="18" width="1136" height="265" rx="8" fill="#f3f6fa"/>
+          <rect x="22" y="292" width="1136" height="356" rx="8" fill="#f8fafb"/>
+          <text x="40" y="42" class="small-title">1 · ACCEPT AND COMMIT THE REQUEST</text>
+          <text x="40" y="317" class="small-title">2 · DELIVER THE TASK AND APPLY ITS RESULT</text>
+          <g aria-hidden="true">
+            <rect x="38" y="58" width="114" height="48" rx="7" fill="#fff" stroke="#b8c8d8"/>
+            <rect x="228" y="58" width="114" height="48" rx="7" fill="#fff" stroke="#b8c8d8"/>
+            <rect x="418" y="58" width="114" height="48" rx="7" fill="#fff" stroke="#b8c8d8"/>
+            <rect x="608" y="58" width="114" height="48" rx="7" fill="#fff" stroke="#b8c8d8"/>
+            <rect x="798" y="58" width="114" height="48" rx="7" fill="#fff" stroke="#b8c8d8"/>
+            <rect x="988" y="58" width="114" height="48" rx="7" fill="#fff" stroke="#b8c8d8"/>
+          </g>
+          <text x="95" y="87" text-anchor="middle" class="node-title">Client</text>
+          <text x="285" y="78" text-anchor="middle" class="small-title">API service</text><text x="285" y="96" text-anchor="middle" class="caption">HTTP · result consumer</text>
+          <text x="475" y="87" text-anchor="middle" class="node-title">SQLite</text>
+          <text x="665" y="87" text-anchor="middle" class="node-title">Publisher</text>
+          <text x="855" y="87" text-anchor="middle" class="node-title">RabbitMQ</text>
+          <text x="1045" y="87" text-anchor="middle" class="node-title">Worker</text>
+          <path class="lifeline" d="M95 106V750 M285 106V750 M475 106V750 M665 106V750 M855 106V750 M1045 106V750"/>
+
+          <path class="flow-request" d="M95 135H285"/>
+          <text x="190" y="127" text-anchor="middle" class="caption">POST /tenants</text>
+          <path class="flow-db" d="M285 174H475"/>
+          <text x="380" y="166" text-anchor="middle" class="caption">BEGIN IMMEDIATE · write 3 rows</text>
+          <path class="flow-db" d="M475 211H285"/>
+          <text x="380" y="203" text-anchor="middle" class="caption">COMMIT all three records</text>
+          <path class="flow-request" d="M285 251H95"/>
+          <text x="190" y="243" text-anchor="middle" class="caption">202 · tenant + task</text>
+          <path class="phase-line" d="M38 283H1142"/>
+
+          <path class="flow-db" d="M665 351H475"/>
+          <text x="570" y="343" text-anchor="middle" class="caption">read unpublished outbox</text>
+          <path class="flow-db" d="M475 389H665"/>
+          <text x="570" y="381" text-anchor="middle" class="caption">committed task event</text>
+          <path class="flow-request" d="M665 427H855"/>
+          <text x="760" y="419" text-anchor="middle" class="caption">publish · broker confirms</text>
+          <path class="flow-request" d="M855 465H1045"/>
+          <text x="950" y="457" text-anchor="middle" class="caption">deliver task</text>
+
+          <path class="flow-result" d="M1045 507H855"/>
+          <text x="950" y="499" text-anchor="middle" class="caption">publish results, then ACK task</text>
+          <path class="flow-result" d="M855 545H285"/>
+          <text x="570" y="537" text-anchor="middle" class="caption">consumer receives progress event</text>
+          <path class="flow-db" d="M285 583H475"/>
+          <text x="380" y="575" text-anchor="middle" class="caption">BEGIN + write inbox, task, tenant</text>
+          <path class="flow-db" d="M475 619H285"/>
+          <text x="380" y="611" text-anchor="middle" class="caption">COMMIT result transaction</text>
+          <path class="flow-result" d="M285 647H855"/>
+          <text x="570" y="639" text-anchor="middle" class="caption">ACK result after commit</text>
+          <path class="flow-request" d="M95 690H285"/>
+          <text x="190" y="682" text-anchor="middle" class="caption">GET /tenants/{id}</text>
+          <path class="flow-request" d="M285 730H95"/>
+          <text x="190" y="722" text-anchor="middle" class="caption">200 · current tenant status</text>
+          <text x="40" y="776" class="caption">After commit, returning HTTP 202 and publishing the task can happen in either order.</text>
+        </svg>
+      </div>
+      <figcaption class="diagram-foot"><span><i class="legend-line"></i>HTTP and task messages</span><span><i class="legend-line result"></i>Progress and acknowledgement</span><span><i class="legend-line db"></i>SQLite reads and transaction</span></figcaption>
+    </figure>
     <div class="callout"><strong>Why the transactional outbox matters</strong><p>The accepted task and the intent to publish it cannot split apart. A database rollback leaves neither. A broker outage leaves the committed outbox row available for a later retry.</p></div>
   </section>
 
